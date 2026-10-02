@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="Glimpse is Nigeria’s mobile-first opinion poll arena. Vote on polls in Politics, Afrobeats, and Cinema, then stay for Chaos Comments."
+    />
+    <meta name="theme-color" content="#090b11" />
+    <title>Glimpse | Opinion Polls</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>G</text></svg>" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="styles.css" />
+
+    <!-- Google tag (gtag.js)
+         1. Create a GA4 property at https://analytics.google.com
+         2. Replace BOTH G-XXXXXXXXXX values below with your Measurement ID -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-XXXXXXXXXX"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag() {
+        dataLayer.push(arguments);
+      }
+      gtag("js", new Date());
+      gtag("config", "G-XXXXXXXXXX");
+    </script>
+
+    <!-- Google AdSense: paste your official script here later.
+         Do not invent a publisher ID. Use the snippet Google gives you. -->
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <div class="brand-wrap">
+          <div class="brand-mark" aria-hidden="true">G</div>
+          <div class="brand-copy">
+            <span class="brand-name">Glimpse</span>
+            <span class="brand-tag">Nigeria’s Pulse Arena</span>
+          </div>
+        </div>
+
+        <nav id="categoryTabs" class="category-tabs" aria-label="Sections"></nav>
+      </header>
+
+      <main class="main-content">
+        <section class="battle-stage" aria-labelledby="battle-header">
+          <div class="section-heading">
+            <div>
+              <span class="eyebrow"><span class="live-dot"></span> Live poll</span>
+              <h1 id="battle-header">Opinion Poll</h1>
+              <p id="battleSubtitle" class="battle-subtitle"></p>
+              <span id="pollTimer" class="poll-timer"></span>
+            </div>
+            <button id="historyButton" class="ghost-button" type="button">
+              See history
+            </button>
+          </div>
+
+          <div id="pollPicker" class="poll-picker" hidden></div>
+
+          <div id="resultBanner" class="result-banner" hidden></div>
+
+          <div id="battleArena" class="battle-arena" aria-live="polite"></div>
+
+          <section id="stateResults" class="state-results" hidden></section>
+
+          <p id="voterNote" class="voter-note" hidden></p>
+
+          <div id="stateBar" class="state-bar" hidden></div>
+
+          <div class="share-row" id="shareRow">
+            <span>Share this poll</span>
+            <button type="button" class="ghost-button" data-share="whatsapp">WhatsApp</button>
+            <button type="button" class="ghost-button" data-share="x">X</button>
+            <button type="button" class="ghost-button" data-share="copy">Copy link</button>
+          </div>
+        </section>
+
+        <section class="comment-section" aria-labelledby="comment-header">
+          <div class="section-heading compact">
+            <div>
+              <span class="eyebrow">This is where the heat starts</span>
+              <h2 id="comment-header">Chaos Comments</h2>
+            </div>
+            <span id="commentPill" class="comment-pill">0 in the stands</span>
+          </div>
+
+          <form id="commentForm" class="comment-form">
+            <p id="commentStateNote" class="voter-note"></p>
+            <div class="author-row">
+              <input
+                id="commentHandle"
+                type="text"
+                maxlength="18"
+                autocomplete="nickname"
+                placeholder="Anonymous handle"
+                aria-label="Comment handle"
+              />
+              <button type="submit" class="primary-button small">Drop comment</button>
+            </div>
+            <textarea
+              id="commentInput"
+              rows="3"
+              maxlength="220"
+              placeholder="Say what the people aren’t saying..."
+              aria-label="Comment text"
+            ></textarea>
+          </form>
+
+          <div id="commentFeed" class="comment-feed" aria-live="polite"></div>
+        </section>
+      </main>
+
+      <footer class="site-footer">
+        <p>
+          Glimpse is a community sentiment arena, not an official poll.
+          One vote per poll on this device. You can change your vote until the poll closes. Be sharp, not reckless.
+        </p>
+        <p><a href="privacy.html">Privacy</a> &middot; <a href="terms.html">Terms</a> &middot; <a href="contact.html">Contact us</a></p>
+      </footer>
+    </div>
+
+    <div id="historyModal" class="modal" hidden>
+      <div class="modal-card" role="dialog" aria-labelledby="historyTitle" aria-modal="true">
+        <div class="modal-head">
+          <h2 id="historyTitle">Past results</h2>
+          <button id="closeHistory" class="ghost-button" type="button">Close</button>
+        </div>
+        <div id="historyList" class="history-list"></div>
+      </div>
+    </div>
+
+    <div id="stateModal" class="modal" hidden>
+      <div class="modal-card" role="dialog" aria-labelledby="stateTitle" aria-modal="true">
+        <div class="modal-head">
+          <h2 id="stateTitle">Choose a state</h2>
+          <button id="closeStates" class="ghost-button" type="button">Close</button>
+        </div>
+        <input id="stateSearch" class="state-search" type="search" placeholder="Search states" autocomplete="off" />
+        <button id="skipState" class="ghost-button" type="button" style="margin-bottom:14px" hidden>Prefer not to say</button>
+        <div id="stateList" class="state-grid"></div>
+      </div>
+    </div>
+
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="app.js"></script>
+  </body>
+</html>

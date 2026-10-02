@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Contact Us | Glimpse</title><link rel="stylesheet" href="styles.css" /></head>
+<body><main class="doc"><p><a href="index.html">&larr; Back to Glimpse</a></p>
+<h1>Contact Us</h1>
+<p>Questions, feedback, a photo takedown request or a comment you want removed? Send us a message. You can also email <a href="mailto:YOUR-EMAIL@example.com">YOUR-EMAIL@example.com</a>.</p>
+<form id="cf">
+  <label>Name (optional)</label><input name="name" maxlength="60" />
+  <label>Email (optional, so we can reply)</label><input name="email" type="email" maxlength="120" />
+  <label>Message</label><textarea name="body" rows="6" maxlength="1000" required></textarea>
+  <p><button class="primary-button small" type="submit">Send message</button></p>
+  <p id="cmsg" role="status"></p>
+</form>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+const sb = window.supabase.createClient("https://hmfwgnazdmhdiydushzm.supabase.co", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhtZndnbmF6ZG1oZGl5ZHVzaHptIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA4NDY2NzQsImV4cCI6MjEwNjQyMjY3NH0.9kqZDcfTvvB5DKONImi07sc5Ll5x4i3YAy8sTjNRDf0");
+document.getElementById("cf").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const msg = document.getElementById("cmsg");
+  const d = new FormData(e.target);
+  msg.textContent = "Sending...";
+  const { data } = await sb.auth.getSession();
+  if (!data.session) {
+    const r = await sb.auth.signInAnonymously();
+    if (r.error) { msg.textContent = "Could not send. Please email us instead."; return; }
+  }
+  const { error } = await sb.rpc("send_message", { p_name: d.get("name"), p_email: d.get("email"), p_body: d.get("body") });
+  if (error) { msg.textContent = error.message; return; }
+  e.target.reset();
+  msg.textContent = "Thanks. Your message was sent.";
+});
+</script></body></html>
