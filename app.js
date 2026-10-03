@@ -766,7 +766,7 @@ function tickTimer() {
     return;
   }
   if (!poll.endsAt) {
-    el.textContent = "Open poll. Result announced by Glimpse.";
+    el.textContent = "Open poll. Winner announced later.";
     return;
   }
 
