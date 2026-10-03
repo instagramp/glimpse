@@ -452,6 +452,47 @@ function commentItemHtml(comment, isReply) {
   `;
 }
 
+function renderCommentPreview(rows, parents) {
+  const box = document.getElementById("commentPreview");
+  document.getElementById("sheetTitle").textContent = rows.length
+    ? `Chaos Comments (${formatCount(rows.length)})`
+    : "Chaos Comments";
+  const top = [...parents]
+    .sort((a, b) => b.score - a.score || new Date(b.created_at) - new Date(a.created_at))
+    .slice(0, 3);
+  const items = top.map((c) => `
+    <article class="preview-item" data-open-comments>
+      <div class="comment-avatar">${escapeText(initials(c.handle))}</div>
+      <div class="comment-main">
+        <div class="comment-header">
+          <span class="comment-author">${escapeText(c.handle)}${c.state ? `<span class="state-tag">${escapeText(c.state)}</span>` : ""}</span>
+          <time class="comment-time">${formatTime(c.created_at)}</time>
+        </div>
+        <p class="comment-text">${escapeText(c.body)}</p>
+      </div>
+      <span class="preview-score">▲ ${formatCount(c.score)}</span>
+    </article>`).join("");
+  box.innerHTML =
+    (top.length
+      ? `<div class="preview-list">${items}</div>`
+      : '<p class="empty-state">The stands are quiet. Be the first to drop a take.</p>') +
+    `<div class="preview-actions">
+      ${rows.length ? `<button type="button" class="ghost-button" data-open-comments>View all ${formatCount(rows.length)} comments</button>` : ""}
+      <button type="button" class="primary-button small" data-open-comments="write">${rows.length ? "Add comment" : "Drop the first take"}</button>
+    </div>`;
+}
+
+function openComments(write) {
+  document.getElementById("commentSheet").hidden = false;
+  document.body.style.overflow = "hidden";
+  if (write) setTimeout(() => document.getElementById("commentInput").focus(), 280);
+}
+
+function closeComments() {
+  document.getElementById("commentSheet").hidden = true;
+  document.body.style.overflow = "";
+}
+
 function renderComments() {
   const poll = currentPoll();
   const feed = document.getElementById("commentFeed");
@@ -461,6 +502,7 @@ function renderComments() {
   const replies = rows.filter((row) => row.parent_id);
 
   pill.textContent = `${formatCount(rows.length)} in the stands`;
+  renderCommentPreview(rows, parents);
 
   if (!parents.length) {
     feed.innerHTML = `<p class="empty-state">The stands are quiet. Drop the first take.</p>`;
@@ -810,6 +852,8 @@ function bindEvents() {
     handleInput.value = handle;
     bodyInput.value = "";
     await postComment(handle, body, null);
+    const sheetBody = document.querySelector(".sheet-body");
+    if (sheetBody) sheetBody.scrollTop = 0;
   });
 
   document.getElementById("commentFeed").addEventListener("click", async (event) => {
@@ -859,6 +903,18 @@ function bindEvents() {
     if (!chip) return;
     state.pollId = chip.dataset.pollId;
     await refresh();
+  });
+
+  document.getElementById("commentPreview").addEventListener("click", (event) => {
+    const target = event.target.closest("[data-open-comments]");
+    if (target) openComments(target.dataset.openComments === "write");
+  });
+  document.getElementById("closeSheet").addEventListener("click", closeComments);
+  document.getElementById("commentSheet").addEventListener("click", (event) => {
+    if (event.target.id === "commentSheet") closeComments();
+  });
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") closeComments();
   });
 
   document.getElementById("stateBar").addEventListener("click", async (event) => {
