@@ -13,63 +13,33 @@ const CONFIG = {
 };
 
 /**
- * POLLS — edit this list to add, change or finish polls.
- *
- * endsAt (optional): an ISO date/time. After it passes, voting closes and the
- *   winner is picked automatically from the votes (use for entertainment).
- *   Lagos time example: "2026-11-01T00:00:00+01:00"
- * winner (optional): "a" or "b". Set this by hand to close a poll and declare
- *   the winner yourself (use for politics). Leave null while the poll is open.
- *
- * Polls with neither endsAt nor winner stay open until you decide.
- * Images must be full https links, not files on your computer.
- * Changing a poll's id starts a fresh vote count.
+ * Demo-mode polls. These are used ONLY when Supabase keys are missing.
+ * With Supabase connected, polls are created and managed in admin.html.
  */
 let POLLS = [
   {
-    id: "politics-tinubu-vs-obi",
-    category: "politics",
-    prompt: "Who currently owns the national conversation?",
-    endsAt: null,
-    winner: null,
-    a: {
-      name: "Bola Ahmed Tinubu",
-      img: "images/tinubu.jpg",
-    },
-    b: {
-      name: "Peter Obi",
-      img: "images/obi.jpg",
-    },
+    id: "politics-tinubu-vs-obi", category: "politics", kind: "choice",
+    prompt: "Who currently owns the national conversation?", endsAt: null, winner: null,
+    options: [
+      { name: "Bola Ahmed Tinubu", img: "images/tinubu.jpg" },
+      { name: "Peter Obi", img: "images/obi.jpg" },
+    ],
   },
   {
-    id: "afrobeats-burna-vs-wizkid",
-    category: "afrobeats",
-    prompt: "Who is running the sound of the streets?",
-    endsAt: "2026-11-01T00:00:00+01:00",
-    winner: null,
-    a: {
-      name: "Burna Boy",
-      img: "images/burna-boy.jpg",
-    },
-    b: {
-      name: "Wizkid",
-      img: "images/wizkid.jpg",
-    },
+    id: "afrobeats-burna-vs-wizkid", category: "afrobeats", kind: "choice",
+    prompt: "Who is running the sound of the streets?", endsAt: "2026-11-01T00:00:00+01:00", winner: null,
+    options: [
+      { name: "Burna Boy", img: "images/burna-boy.jpg" },
+      { name: "Wizkid", img: "images/wizkid.jpg" },
+    ],
   },
   {
-    id: "cinema-funke-vs-ali",
-    category: "cinema",
-    prompt: "Nollywood vs Kannywood — whose screen is louder?",
-    endsAt: "2026-11-01T00:00:00+01:00",
-    winner: null,
-    a: {
-      name: "Funke Akindele",
-      img: "images/funke-akindele.jpg",
-    },
-    b: {
-      name: "Ali Nuhu",
-      img: "images/ali-nuhu.jpg",
-    },
+    id: "cinema-funke-vs-ali", category: "cinema", kind: "choice",
+    prompt: "Nollywood vs Kannywood: whose screen is louder?", endsAt: "2026-11-01T00:00:00+01:00", winner: null,
+    options: [
+      { name: "Funke Akindele", img: "images/funke-akindele.jpg" },
+      { name: "Ali Nuhu", img: "images/ali-nuhu.jpg" },
+    ],
   },
 ];
 
@@ -191,21 +161,28 @@ function renderStateResults() {
     el.hidden = true;
     return;
   }
-  const rows = sr.rows
-    .map((r) => ({ s: r.voter_state, a: Number(r.side_a), b: Number(r.side_b) }))
-    .map((r) => ({ ...r, t: r.a + r.b }))
+  const by = {};
+  sr.rows.forEach((r) => {
+    const o = by[r.voter_state] || (by[r.voter_state] = {});
+    o[r.side] = (o[r.side] || 0) + Number(r.votes);
+  });
+  const rows = Object.entries(by)
+    .map(([name, o]) => ({ name, o, t: Object.values(o).reduce((x, y) => x + y, 0) }))
     .sort((x, y) => y.t - x.t)
     .slice(0, 10);
   el.hidden = false;
   el.innerHTML =
     `<h3>🗺️ How states are voting</h3>
-     <div class="sr-legend"><span><i class="dot-a"></i>${escapeText(poll.a.name)}</span><span><i class="dot-b"></i>${escapeText(poll.b.name)}</span></div>` +
+     <div class="sr-legend">${poll.options.map((o, i) => `<span><i style="background:${OPT_COLORS[i % 8]}"></i>${escapeText(o.name)}</span>`).join("")}</div>` +
     rows
       .map((r) => {
-        const pa = percent(r.a, r.t);
-        const pb = 100 - pa;
-        const lead = r.a === r.b ? "Tied" : r.a > r.b ? `${poll.a.name} ${pa}%` : `${poll.b.name} ${pb}%`;
-        return `<div class="sr-row"><span class="sr-state">${escapeText(r.s)}</span><div class="sr-bar"><span class="sr-a" style="width:${pa}%"></span><span class="sr-b" style="width:${pb}%"></span></div><span class="sr-lead">${escapeText(lead)}</span></div>`;
+        const vals = poll.options.map((_, i) => r.o[i] || 0);
+        const max = Math.max(...vals);
+        const leaders = vals.filter((v) => v === max).length;
+        const k = vals.indexOf(max);
+        const lead = leaders > 1 ? "Tied" : `${poll.options[k].name} ${percent(max, r.t)}%`;
+        const segs = vals.map((v, i) => `<span style="flex:${v};background:${OPT_COLORS[i % 8]}"></span>`).join("");
+        return `<div class="sr-row"><span class="sr-state">${escapeText(r.name)}</span><div class="sr-bar">${segs}</div><span class="sr-lead">${escapeText(lead)}</span></div>`;
       })
       .join("") +
     '<p class="sr-note">Only states with enough votes are shown. States are chosen by voters.</p>';
@@ -265,9 +242,10 @@ async function loadPolls() {
     return;
   }
   POLLS = data.map((r) => ({
-    id: r.id, category: r.category, state: r.state, prompt: r.prompt, endsAt: r.ends_at, winner: r.winner, closed: r.closed,
-    a: { name: r.a_name, img: r.a_img, credit: r.a_credit },
-    b: { name: r.b_name, img: r.b_img, credit: r.b_credit },
+    id: r.id, category: r.category, state: r.state, prompt: r.prompt,
+    endsAt: r.ends_at, winner: r.winner, closed: r.closed,
+    kind: r.kind || "choice", image: r.image, imageCredit: r.image_credit,
+    options: (Array.isArray(r.options) ? r.options : []).map((o) => ({ name: o.name, img: o.img || "", credit: o.credit || null })),
   }));
 }
 
@@ -276,7 +254,7 @@ function renderPicker(current) {
   const list = pollsInView();
   el.hidden = list.length < 2;
   el.innerHTML = list
-    .map((p) => `<button type="button" class="chip ${p.id === current.id ? "active" : ""}" data-poll-id="${escapeText(p.id)}">${escapeText(p.a.name)} vs ${escapeText(p.b.name)}</button>`)
+    .map((p) => `<button type="button" class="chip ${p.id === current.id ? "active" : ""}" data-poll-id="${escapeText(p.id)}">${escapeText(pollLabel(p))}</button>`)
     .join("");
 }
 
@@ -331,53 +309,79 @@ function initials(handle) {
   return (handle || "AN").slice(0, 2).toUpperCase();
 }
 
+const OPT_COLORS = ["#2ee59d", "#8a5cff", "#ff4d9d", "#ffb84d", "#4dc3ff", "#ff6f4d", "#b6ff4d", "#4d6bff"];
+
+function countsTotal(counts) {
+  return Object.values(counts || {}).reduce((n, v) => n + Number(v || 0), 0);
+}
+
+function pollLabel(p, max = 44) {
+  const text = p.kind === "yesno" ? p.prompt : p.options.map((o) => o.name).join(" vs ");
+  return text.length > max ? text.slice(0, max - 1) + "…" : text;
+}
+
+function demoCounts(poll) {
+  return poll.options.length >= 2 ? { 0: 12840, 1: 11990 } : {};
+}
+
 function percent(part, total) {
-  if (!total) return 50;
+  if (!total) return 0;
   return Math.round((part / total) * 100);
 }
 
 function pollStatus(poll, score) {
-  if (poll.winner === "a" || poll.winner === "b") {
-    return { closed: true, winner: poll.winner, auto: false };
+  const w = poll.winner;
+  if (w !== null && w !== undefined && w !== "" && poll.options[Number(w)]) {
+    return { closed: true, winner: String(w), auto: false };
   }
   if (poll.closed || (poll.endsAt && Date.now() >= new Date(poll.endsAt).getTime())) {
-    const winner = score.a === score.b ? "tie" : score.a > score.b ? "a" : "b";
+    const vals = poll.options.map((_, i) => Number((score || {})[i] || 0));
+    const max = Math.max(...vals);
+    const leaders = vals.map((v, i) => (v === max ? i : -1)).filter((i) => i >= 0);
+    const winner = max === 0 ? "none" : leaders.length > 1 ? "tie" : String(leaders[0]);
     return { closed: true, winner, auto: true };
   }
   return { closed: false };
 }
 
-function cardHtml(poll, side, votes, total, mySide, status) {
-  const contender = poll[side];
+function cardHtml(poll, idx, votes, total, mySide, status) {
+  const opt = poll.options[idx];
+  const side = String(idx);
   const share = percent(votes, total);
   const mine = mySide === side;
   const won = status.closed && status.winner === side;
-  let label = "VOTE";
-  let cls = "";
+  const yn = poll.kind === "yesno";
+  let label = yn ? "VOTE " + opt.name.toUpperCase() : "VOTE";
+  let cls = yn ? (idx === 0 ? "yes" : "no") : "";
   if (status.closed) {
     label = won ? "WINNER" : mine ? "YOU VOTED" : "FINAL";
     cls = won ? "closed winner" : "closed";
   } else if (mine) {
     label = "REMOVE VOTE";
     cls = "voted";
-  } else if (mySide) {
-    label = "SWITCH VOTE";
+  } else if (mySide !== null && mySide !== undefined) {
+    label = yn ? "SWITCH TO " + opt.name.toUpperCase() : "SWITCH VOTE";
     cls = "switch";
   }
 
-  return `
-    <article class="battle-card ${mine ? "voted" : ""} ${won ? "winner" : ""}" data-side="${side}">
-      <div class="battle-media">
-        <img src="${contender.img}" alt="${escapeText(contender.name)}" loading="lazy" onerror="this.style.display='none'" />
+  const overlay = `
         <div class="battle-overlay">
-          <span class="battle-name">${escapeText(contender.name)}</span>
-          ${contender.credit ? `<span class="photo-credit">Photo: ${escapeText(contender.credit)}</span>` : ""}
+          <span class="battle-name">${escapeText(opt.name)}</span>
+          ${opt.credit ? `<span class="photo-credit">Photo: ${escapeText(opt.credit)}</span>` : ""}
           <div class="overlay-meta"><strong>${share}%</strong><span>${formatCount(votes)} votes</span></div>
           <div class="vote-progress" aria-hidden="true">
             <div class="vote-progress-bar" style="width:${share}%"></div>
           </div>
-        </div>
-      </div>
+        </div>`;
+  const media = yn
+    ? `<div class="battle-media yn-media"><span class="yn-icon">${idx === 0 ? "👍" : "👎"}</span>${overlay}</div>`
+    : `<div class="battle-media">
+        <img src="${opt.img}" alt="${escapeText(opt.name)}" loading="lazy" onerror="this.style.display='none'" />${overlay}
+      </div>`;
+
+  return `
+    <article class="battle-card ${mine ? "voted" : ""} ${won ? "winner" : ""}" data-side="${side}">
+      ${media}
       <div class="battle-body">
         <button class="vote-button ${cls}" type="button" data-vote="${side}" ${status.closed ? "disabled" : ""}>
           ${label}
@@ -390,20 +394,22 @@ function cardHtml(poll, side, votes, total, mySide, status) {
 function renderArena() {
   const poll = currentPoll();
   renderStateBar();
+  const arena = document.getElementById("battleArena");
   if (!poll) {
     document.getElementById("battleSubtitle").textContent = "";
     document.getElementById("resultBanner").hidden = true;
     document.getElementById("pollTimer").textContent = "";
     document.getElementById("pollPicker").hidden = true;
-    document.getElementById("battleArena").innerHTML = '<p class="empty-state">' + (state.stateFilter ? "No polls for " + escapeText(state.stateFilter) + " yet." : "No polls here yet. Check back soon.") + "</p>";
+    arena.className = "battle-arena";
+    arena.innerHTML = '<p class="empty-state">' + (state.stateFilter ? "No polls for " + escapeText(state.stateFilter) + " yet." : "No polls here yet. Check back soon.") + "</p>";
     return;
   }
   renderPicker(poll);
-  const score = state.scores[poll.id] || { a: 0, b: 0 };
-  const total = score.a + score.b;
+
+  const score = state.scores[poll.id] || {};
+  const total = countsTotal(score);
   const mySide = getStoredVote(poll.id);
   const status = pollStatus(poll, score);
-  const arena = document.getElementById("battleArena");
   const banner = document.getElementById("resultBanner");
 
   state.lastClosed = status.closed;
@@ -412,18 +418,22 @@ function renderArena() {
   if (status.closed) {
     banner.hidden = false;
     banner.textContent =
-      status.winner === "tie"
-        ? "Final result: it's a tie."
-        : `🏆 Winner: ${poll[status.winner].name}`;
+      status.winner === "tie" ? "Final result: it's a tie."
+      : status.winner === "none" ? "Poll closed with no votes."
+      : `🏆 Winner: ${poll.options[Number(status.winner)].name}`;
   } else {
     banner.hidden = true;
   }
 
-  arena.innerHTML = `
-    ${cardHtml(poll, "a", score.a, total, mySide, status)}
-    <div class="vs-badge" aria-hidden="true">VS</div>
-    ${cardHtml(poll, "b", score.b, total, mySide, status)}
-  `;
+  const n = poll.options.length;
+  const yn = poll.kind === "yesno";
+  arena.className = "battle-arena " + (yn ? "arena-yn" : n === 1 ? "arena-n1" : n === 2 ? "arena-n2" : "arena-multi");
+  const cards = poll.options.map((_, i) => cardHtml(poll, i, Number(score[i] || 0), total, mySide, status));
+  let html = n === 2 && !yn ? cards[0] + '<div class="vs-badge" aria-hidden="true">VS</div>' + cards[1] : cards.join("");
+  if (yn && poll.image) {
+    html = `<div class="yn-hero"><img src="${poll.image}" alt="" onerror="this.style.display='none'" />${poll.imageCredit ? `<span class="photo-credit yn-credit">Photo: ${escapeText(poll.imageCredit)}</span>` : ""}</div>` + html;
+  }
+  arena.innerHTML = html;
   tickTimer();
 }
 
@@ -518,16 +528,17 @@ function renderComments() {
 }
 
 function renderHistory() {
-  const finished = POLLS.map((p) => ({ p, s: state.scores[p.id] || { a: 0, b: 0 } }))
+  const finished = POLLS.map((p) => ({ p, s: state.scores[p.id] || {} }))
     .filter(({ p, s }) => pollStatus(p, s).closed)
     .map(({ p, s }) => {
       const st = pollStatus(p, s);
-      const t = s.a + s.b;
+      const t = countsTotal(s);
+      const parts = p.options.map((o, i) => `${o.name} ${percent(Number(s[i] || 0), t)}%`).join(" vs ");
+      const tail = st.winner === "tie" ? " (tie)" : st.winner === "none" ? " (no votes)" : ` · ${p.options[Number(st.winner)].name} won`;
       return {
         week: p.endsAt ? new Date(p.endsAt).toLocaleDateString("en-NG", { day: "numeric", month: "short", year: "numeric" }) : "Announced",
         category: (SECTIONS.find((x) => x.id === p.category) || {}).label || p.category,
-        result: `${p.a.name} ${percent(s.a, t)}% vs ${p.b.name} ${percent(s.b, t)}%` +
-          (st.winner === "tie" ? " (tie)" : ` · ${p[st.winner].name} won`),
+        result: (p.kind === "yesno" ? p.prompt + ": " : "") + parts + tail,
       };
     });
   const items = [...finished, ...POLL_HISTORY];
@@ -548,13 +559,13 @@ async function loadScores() {
   if (!poll) return;
   if (state.demo) {
     const local = JSON.parse(localStorage.getItem("glimpse_demo_scores") || "{}");
-    state.scores[poll.id] = local[poll.id] || { a: 12840, b: 11990 };
+    state.scores[poll.id] = local[poll.id] || demoCounts(poll);
     return;
   }
 
   const { data, error } = await state.client
     .from("poll_scores")
-    .select("poll_id, side_a, side_b")
+    .select("poll_id, counts")
     .eq("poll_id", poll.id)
     .maybeSingle();
 
@@ -563,11 +574,9 @@ async function loadScores() {
     return;
   }
 
-  state.scores[poll.id] = data
-    ? { a: data.side_a, b: data.side_b }
-    : { a: 0, b: 0 };
+  state.scores[poll.id] = (data && data.counts) || {};
 
-  // The server is the source of truth for which side this person voted
+  // The server is the source of truth for which card this person voted for
   const { data: mine } = await state.client
     .from("votes").select("side").eq("poll_id", poll.id).maybeSingle();
   if (mine) localStorage.setItem(VOTE_KEY(poll.id), mine.side);
@@ -578,12 +587,12 @@ async function loadAllScores() {
   const ids = POLLS.map((p) => p.id);
   if (state.demo) {
     const local = JSON.parse(localStorage.getItem("glimpse_demo_scores") || "{}");
-    ids.forEach((id) => { if (local[id]) state.scores[id] = local[id]; });
+    POLLS.forEach((p) => { state.scores[p.id] = local[p.id] || demoCounts(p); });
     return;
   }
   const { data } = await state.client
-    .from("poll_scores").select("poll_id, side_a, side_b").in("poll_id", ids);
-  (data || []).forEach((r) => { state.scores[r.poll_id] = { a: r.side_a, b: r.side_b }; });
+    .from("poll_scores").select("poll_id, counts").in("poll_id", ids);
+  (data || []).forEach((r) => { state.scores[r.poll_id] = r.counts || {}; });
 }
 
 async function ensureSession() {
@@ -634,7 +643,7 @@ function saveDemoComments() {
 async function castVote(side) {
   const poll = currentPoll();
   if (!poll) return;
-  const score = state.scores[poll.id] || { a: 0, b: 0 };
+  const score = state.scores[poll.id] || {};
   if (pollStatus(poll, score).closed) {
     toast("Voting has closed on this poll.");
     renderArena();
@@ -651,20 +660,20 @@ async function castVote(side) {
   }
 
   const move = (from, to) => {
-    if (from) score[from] = Math.max(0, score[from] - 1);
-    if (to) score[to] += 1;
-    if (to) localStorage.setItem(VOTE_KEY(poll.id), to);
+    if (from !== null && from !== undefined) score[from] = Math.max(0, Number(score[from] || 0) - 1);
+    if (to !== null && to !== undefined) score[to] = Number(score[to] || 0) + 1;
+    if (to !== null && to !== undefined) localStorage.setItem(VOTE_KEY(poll.id), to);
     else localStorage.removeItem(VOTE_KEY(poll.id));
     state.scores[poll.id] = score;
     renderArena();
   };
 
   move(prev, next);
-  if (next) {
+  if (next !== null) {
     const btn = document.querySelector(`[data-vote="${next}"]`);
     if (btn) btn.classList.add("is-animating");
   }
-  toast(!next ? "Vote removed." : prev ? "Vote switched." : "Vote locked in.");
+  toast(next === null ? "Vote removed." : prev !== null ? "Vote switched." : "Vote locked in.");
 
   if (state.demo) {
     saveDemoScores();
@@ -673,12 +682,12 @@ async function castVote(side) {
 
   const { data, error } = await state.client.rpc("set_vote", {
     p_poll_id: poll.id,
-    p_side: next || "none",
+    p_side: next === null ? "none" : next,
     p_state: voterStateForServer(),
   });
 
   if (error) {
-    console.error("change_vote failed:", error);
+    console.error("set_vote failed:", error);
     move(next, prev); // undo
     toast("Vote did not save: " + (error.message || "unknown error"));
     return;
@@ -686,8 +695,8 @@ async function castVote(side) {
 
   loadStateResults().then(renderStateResults);
 
-  if (data && data[0]) {
-    state.scores[poll.id] = { a: data[0].side_a, b: data[0].side_b };
+  if (data && typeof data === "object") {
+    state.scores[poll.id] = data;
     renderArena();
   }
 }
@@ -743,7 +752,8 @@ async function reportComment(id) {
 function sharePoll(kind) {
   const poll = currentPoll();
   if (!poll) return;
-  const text = `${poll.a.name} vs ${poll.b.name}: ${poll.prompt} Vote on Glimpse`;
+  const label = poll.kind === "yesno" ? poll.prompt : `${poll.options.map((o) => o.name).join(" vs ")}: ${poll.prompt}`;
+  const text = `${label} Vote on Glimpse`;
   const url = location.href;
   if (kind === "whatsapp") {
     window.open(`https://wa.me/?text=${encodeURIComponent(text + " " + url)}`, "_blank", "noopener");
@@ -799,7 +809,7 @@ function tickTimer() {
   const poll = currentPoll();
   if (!poll) return;
   const el = document.getElementById("pollTimer");
-  const score = state.scores[poll.id] || { a: 0, b: 0 };
+  const score = state.scores[poll.id] || {};
   const status = pollStatus(poll, score);
 
   if (status.closed) {
@@ -980,7 +990,7 @@ function subscribeRealtime() {
       (payload) => {
         const row = payload.new;
         if (!row) return;
-        state.scores[row.poll_id] = { a: row.side_a, b: row.side_b };
+        state.scores[row.poll_id] = row.counts || {};
         if (row.poll_id === currentPoll()?.id) {
           renderArena();
           loadStateResults().then(renderStateResults);
