@@ -29,6 +29,9 @@
 .tbl table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
 .tbl th, .tbl td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; }
 .admin h3 { margin: 16px 0 6px; font-size: 1rem; }
+.opt-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; }
+.opt-head { display: flex; justify-content: space-between; align-items: center; padding-top: 10px; }
+.opt-head button { background: none; border: 0; color: var(--red); font-weight: 700; }
 .admin h2 { margin: 0 0 4px; letter-spacing: -0.04em; }
 @media (max-width: 720px) { .grid2 { grid-template-columns: 1fr; } }
 </style>
@@ -75,13 +78,16 @@
           <label>State (only for sections with state races. Leave on National otherwise)</label>
           <select name="state"><option value="">National (presidential)</option></select>
           <label>Question</label><input name="prompt" maxlength="120" required placeholder="Who is running the sound of the streets?" />
-          <div class="grid2" style="margin-top:12px">
-            <div class="side-box"><label>Side A name</label><input name="a_name" required maxlength="40" />
-              <label>Photo (any size, it gets cropped square)</label><input name="a_file" type="file" accept="image/*" />
-              <label>Photo credit (optional)</label><input name="a_credit" maxlength="60" /></div>
-            <div class="side-box"><label>Side B name</label><input name="b_name" required maxlength="40" />
-              <label>Photo</label><input name="b_file" type="file" accept="image/*" />
-              <label>Photo credit (optional)</label><input name="b_credit" maxlength="60" /></div>
+          <label>Poll type</label>
+          <select name="kind"><option value="choice">Candidates (1 to 8 photo cards)</option><option value="yesno">Yes / No question</option></select>
+          <div id="choiceBox" style="margin-top:12px">
+            <div id="optList" class="opt-grid"></div>
+            <div class="row"><button type="button" class="ghost-button" id="addOpt">+ Add card</button></div>
+          </div>
+          <div id="yesnoBox" class="side-box" style="margin-top:12px" hidden>
+            <p class="muted">Voters see YES and NO buttons. A photo is optional.</p>
+            <label>Photo (optional)</label><input name="yn_file" type="file" accept="image/*" />
+            <label>Photo credit (optional)</label><input name="yn_credit" maxlength="60" />
           </div>
           <div class="row">
             <button class="primary-button small" type="submit" id="saveBtn">Save poll</button>
