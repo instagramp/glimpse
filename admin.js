@@ -71,7 +71,7 @@ $("adminTabs").addEventListener("click", (e) => {
 async function loadAll() {
   const [p, sc, se] = await Promise.all([
     sb.from("polls").select("*").order("created_at", { ascending: false }),
-    sb.from("poll_scores").select("poll_id, side_a, side_b"),
+    sb.from("poll_scores").select("poll_id, counts"),
     sb.from("sections").select("*").order("sort_order"),
   ]);
   polls = p.data || [];
@@ -80,13 +80,21 @@ async function loadAll() {
   renderSections();
   fillInsightPolls();
   scores = {};
-  (sc.data || []).forEach((r) => (scores[r.poll_id] = r));
+  (sc.data || []).forEach((r) => (scores[r.poll_id] = r.counts || {}));
   renderPolls();
+}
+
+function adminLabel(p) {
+  return p.kind === "yesno" ? "Yes/No: " + p.prompt : (p.options || []).map((o) => o.name).join(" vs ");
+}
+
+function votesOf(id) {
+  return Object.values(scores[id] || {}).reduce((n, v) => n + Number(v || 0), 0);
 }
 
 function status(p) {
   if (p.archived) return "Archived (hidden from site)";
-  if (p.winner) return "Winner: " + (p.winner === "a" ? p.a_name : p.b_name);
+  if (p.winner !== null && p.winner !== undefined && (p.options || [])[Number(p.winner)]) return "Winner: " + p.options[Number(p.winner)].name;
   if (p.closed) return "Closed";
   if (p.ends_at) return new Date(p.ends_at) <= new Date() ? "Ended, auto result" : "Ends " + new Date(p.ends_at).toLocaleString("en-NG");
   return "Open, manual result";
@@ -95,15 +103,15 @@ function status(p) {
 function renderPolls() {
   $("pollList").innerHTML = polls.length
     ? polls.map((p) => {
-        const s = scores[p.id] || { side_a: 0, side_b: 0 };
+        const c = scores[p.id] || {};
+        const opts = p.options || [];
         return `<div class="item" data-id="${esc(p.id)}">
-          <div><strong>${esc(p.a_name)} vs ${esc(p.b_name)}</strong>
-            <div class="muted">${esc(p.category)}${p.state ? " · " + esc(p.state) : ""} · ${esc(status(p))} · votes ${s.side_a} - ${s.side_b}</div>
+          <div><strong>${esc(adminLabel(p))}</strong>
+            <div class="muted">${esc(p.category)}${p.state ? " · " + esc(p.state) : ""} · ${esc(status(p))} · votes ${opts.map((o, i) => Number(c[i] || 0)).join(" - ")}</div>
             <div class="muted">${esc(p.prompt)}</div></div>
           <div class="btns">
             <button data-act="edit">Edit</button>
-            <button data-act="win-a">Winner: ${esc(p.a_name)}</button>
-            <button data-act="win-b">Winner: ${esc(p.b_name)}</button>
+            ${opts.map((o, i) => `<button data-act="win-${i}">Winner: ${esc(o.name)}</button>`).join("")}
             <button data-act="close">Close</button>
             <button data-act="reopen">Reopen</button>
             <button data-act="archive">${p.archived ? "Unhide" : "Hide"}</button>
@@ -131,10 +139,9 @@ $("pollList").addEventListener("click", async (e) => {
     const { error } = await sb.rpc("admin_delete_poll", { p_id: id });
     return done(error, "Poll deleted.");
   }
-  const patch = {
-    "win-a": { winner: "a" }, "win-b": { winner: "b" }, close: { closed: true },
-    reopen: { closed: false, winner: null, ends_at: null }, archive: { archived: !p.archived },
-  }[a];
+  const patch = a.startsWith("win-")
+    ? { winner: a.slice(4) }
+    : { close: { closed: true }, reopen: { closed: false, winner: null, ends_at: null }, archive: { archived: !p.archived } }[a];
   const { error } = await sb.from("polls").update(patch).eq("id", id);
   done(error);
 });
@@ -149,9 +156,13 @@ function startEdit(p) {
   editing = p.id;
   const f = $("pollForm").elements;
   f.category.value = p.category; f.state.value = p.state || ""; f.prompt.value = p.prompt; f.ends_at.value = localInput(p.ends_at);
-  f.a_name.value = p.a_name; f.a_credit.value = p.a_credit || "";
-  f.b_name.value = p.b_name; f.b_credit.value = p.b_credit || "";
-  f.a_file.value = ""; f.b_file.value = "";
+  f.kind.value = p.kind || "choice";
+  f.kind.disabled = true;
+  f.yn_file.value = ""; f.yn_credit.value = p.image_credit || "";
+  const locked = votesOf(p.id) > 0;
+  draft = (p.options || []).map((o) => ({ name: o.name, img: o.img || "", credit: o.credit || "", file: null, locked }));
+  renderDraft();
+  setKind();
   $("formTitle").textContent = "Edit poll (leave photos empty to keep them)";
   $("cancelEdit").hidden = false;
   window.scrollTo({ top: 0, behavior: "smooth" });
@@ -160,6 +171,9 @@ function startEdit(p) {
 function resetForm() {
   editing = null;
   $("pollForm").reset();
+  $("pollForm").elements.kind.disabled = false;
+  newDraft();
+  setKind();
   $("formTitle").textContent = "Add a poll";
   $("cancelEdit").hidden = true;
 }
@@ -192,23 +206,44 @@ async function photo(file, existing) {
 
 $("pollForm").addEventListener("submit", async (e) => {
   e.preventDefault();
-  const d = Object.fromEntries(new FormData(e.target));
+  syncDraft();
+  const f = $("pollForm").elements;
+  const kind = f.kind.value;
   const old = editing && polls.find((p) => p.id === editing);
   const btn = $("saveBtn");
   btn.disabled = true;
   try {
     const row = {
-      category: d.category, state: hasStates(d.category) && d.state ? d.state : null, prompt: d.prompt.trim(),
-      a_name: d.a_name.trim(), b_name: d.b_name.trim(),
-      a_credit: d.a_credit.trim() || null, b_credit: d.b_credit.trim() || null,
-      ends_at: d.ends_at ? new Date(d.ends_at).toISOString() : null,
+      category: f.category.value,
+      state: hasStates(f.category.value) && f.state.value ? f.state.value : null,
+      prompt: f.prompt.value.trim(),
+      kind,
+      ends_at: f.ends_at.value ? new Date(f.ends_at.value).toISOString() : null,
     };
-    row.a_img = await photo(d.a_file, old && old.a_img);
-    row.b_img = await photo(d.b_file, old && old.b_img);
-    if (!row.a_img || !row.b_img) throw new Error("Add a photo for both sides.");
+    if (!row.prompt) throw new Error("Write the question.");
+    if (kind === "yesno") {
+      row.options = [{ name: "Yes", img: "", credit: null }, { name: "No", img: "", credit: null }];
+      row.image = (await photo(f.yn_file.files[0], old && old.image)) || null;
+      row.image_credit = f.yn_credit.value.trim() || null;
+    } else {
+      if (!draft.length) throw new Error("Add at least one card.");
+      row.options = [];
+      for (const [i, o] of draft.entries()) {
+        const name = o.name.trim();
+        if (!name) throw new Error(`Card ${i + 1} needs a name.`);
+        const img = await photo(o.file, o.img);
+        if (!img) throw new Error(`Card ${i + 1} needs a photo.`);
+        row.options.push({ name, img, credit: (o.credit || "").trim() || null });
+      }
+      row.image = null;
+      row.image_credit = null;
+    }
     let res;
     if (editing) res = await sb.from("polls").update(row).eq("id", editing);
-    else res = await sb.from("polls").insert({ id: `${row.category}-${slug(row.a_name)}-vs-${slug(row.b_name)}-${Date.now().toString(36)}`, ...row });
+    else {
+      const first = kind === "yesno" ? "yesno-" + slug(row.prompt) : slug(row.options[0].name) + (row.options[1] ? "-vs-" + slug(row.options[1].name) : "");
+      res = await sb.from("polls").insert({ id: `${row.category}-${first}-${Date.now().toString(36)}`, ...row });
+    }
     if (res.error) throw res.error;
     resetForm();
     await done(null, "Poll saved.");
@@ -239,7 +274,7 @@ function renderComments() {
         return `<div class="item" data-id="${esc(c.id)}">
           <div><strong>${esc(c.handle)}</strong> <span class="muted">${new Date(c.created_at).toLocaleString("en-NG")}</span>
             <div>${esc(c.body)}</div>
-            <div class="muted">${p ? esc(p.a_name + " vs " + p.b_name) : "deleted poll"} · ${c.reports} reports · score ${c.score}${c.hidden ? " · HIDDEN" : ""}</div></div>
+            <div class="muted">${p ? esc(adminLabel(p)) : "deleted poll"} · ${c.reports} reports · score ${c.score}${c.hidden ? " · HIDDEN" : ""}</div></div>
           <div class="btns">
             ${c.hidden ? '<button data-cact="restore">Restore</button>' : '<button data-cact="hide">Hide</button>'}
             <button data-cact="delete" class="danger">Delete</button>
@@ -396,7 +431,7 @@ $("msgList").addEventListener("click", async (e) => {
 function fillInsightPolls() {
   const sel = $("insPoll");
   const cur = sel.value;
-  sel.innerHTML = polls.map((p) => `<option value="${esc(p.id)}">${esc(p.a_name)} vs ${esc(p.b_name)}${p.state ? " (" + esc(p.state) + ")" : ""}</option>`).join("");
+  sel.innerHTML = polls.map((p) => `<option value="${esc(p.id)}">${esc(adminLabel(p))}${p.state ? " (" + esc(p.state) + ")" : ""}</option>`).join("");
   if (cur) sel.value = cur;
 }
 
@@ -419,31 +454,88 @@ async function loadInsights() {
 
   const p = polls.find((x) => x.id === id);
   if (!p) { $("insBody").innerHTML = ""; return; }
+  const opts = p.options || [];
   const by = {};
-  let A = 0, B = 0;
+  const tot = opts.map(() => 0);
   (b.data || []).forEach((r) => {
-    const o = by[r.voter_state] || (by[r.voter_state] = { a: 0, b: 0 });
-    const n = Number(r.votes);
-    if (r.side === "a") { o.a += n; A += n; } else { o.b += n; B += n; }
+    const i = Number(r.side);
+    if (!opts[i]) return;
+    const row = by[r.voter_state] || (by[r.voter_state] = opts.map(() => 0));
+    row[i] += Number(r.votes);
+    tot[i] += Number(r.votes);
   });
-  const T = A + B;
+  const T = tot.reduce((x, y) => x + y, 0);
   if (!T) { $("insBody").innerHTML = '<p class="muted">No votes on this poll yet.</p>'; return; }
 
-  const names = { a: p.a_name, b: p.b_name };
-  const block = (k, tot) => `<div><h3>${esc(names[k])}: ${tot} votes (${pct(tot, T)}%)</h3>
+  const block = (k) => `<div><h3>${esc(opts[k].name)}: ${tot[k]} votes (${pct(tot[k], T)}%)</h3>
     <div class="muted">Where their votes come from</div>` +
     Object.entries(by).map(([s, o]) => [s, o[k]]).filter((x) => x[1] > 0).sort((x, y) => y[1] - x[1]).slice(0, 10)
-      .map(([s, n]) => `<div class="statrow"><span>${esc(s)}</span><span>${pct(n, tot)}% · ${n}</span></div><div class="bar"><span style="width:${pct(n, tot)}%"></span></div>`).join("") + "</div>";
+      .map(([s, n]) => `<div class="statrow"><span>${esc(s)}</span><span>${pct(n, tot[k])}% · ${n}</span></div><div class="bar"><span style="width:${pct(n, tot[k])}%"></span></div>`).join("") + "</div>";
 
-  const rows = Object.entries(by).sort((x, y) => y[1].a + y[1].b - (x[1].a + x[1].b)).map(([s, o]) => {
-    const t = o.a + o.b;
-    const lead = o.a === o.b ? "Tie" : o.a > o.b ? `${names.a} ${pct(o.a, t)}%` : `${names.b} ${pct(o.b, t)}%`;
-    return `<tr><td>${esc(s)}</td><td>${o.a}</td><td>${o.b}</td><td>${t}</td><td>${esc(lead)}</td></tr>`;
+  const rows = Object.entries(by).sort((x, y) => y[1].reduce((a, c) => a + c, 0) - x[1].reduce((a, c) => a + c, 0)).map(([s, o]) => {
+    const t = o.reduce((a, c) => a + c, 0);
+    const max = Math.max(...o);
+    const lead = o.filter((n) => n === max).length > 1 ? "Tie" : `${opts[o.indexOf(max)].name} ${pct(max, t)}%`;
+    return `<tr><td>${esc(s)}</td>${o.map((n) => `<td>${n}</td>`).join("")}<td>${t}</td><td>${esc(lead)}</td></tr>`;
   }).join("");
 
-  $("insBody").innerHTML = `<div class="grid2">${block("a", A)}${block("b", B)}</div>
+  $("insBody").innerHTML = `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px">${opts.map((_, k) => block(k)).join("")}</div>
     <h3>By state</h3>
-    <div class="tbl"><table><tr><th>State</th><th>${esc(names.a)}</th><th>${esc(names.b)}</th><th>Total</th><th>Leading</th></tr>${rows}</table></div>`;
+    <div class="tbl"><table><tr><th>State</th>${opts.map((o) => `<th>${esc(o.name)}</th>`).join("")}<th>Total</th><th>Leading</th></tr>${rows}</table></div>`;
 }
+
+// ---- card editor for candidate polls ----
+let draft = [];
+const MAX_CARDS = 8;
+const attr = (v) => esc(v).replace(/"/g, "&quot;");
+const blankCard = () => ({ name: "", img: "", credit: "", file: null, locked: false });
+
+function newDraft() {
+  draft = [blankCard(), blankCard()];
+  renderDraft();
+}
+
+function syncDraft() {
+  document.querySelectorAll("#optList .opt").forEach((el, i) => {
+    if (!draft[i]) return;
+    draft[i].name = el.querySelector(".o-name").value;
+    draft[i].credit = el.querySelector(".o-credit").value;
+    const file = el.querySelector(".o-file").files[0];
+    if (file) draft[i].file = file;
+  });
+}
+
+function renderDraft() {
+  $("optList").innerHTML = draft.map((o, i) => `<div class="side-box opt">
+      <div class="opt-head"><strong>Card ${i + 1}</strong>${draft.length > 1 && !o.locked ? `<button type="button" data-optdel="${i}">Remove</button>` : ""}</div>
+      <label>Name</label><input class="o-name" maxlength="40" value="${attr(o.name)}" />
+      <label>Photo (any size, cropped square)</label><input class="o-file" type="file" accept="image/*" />
+      <div class="muted">${o.file ? "New photo: " + esc(o.file.name) : o.img ? "Current photo kept" : "No photo yet"}</div>
+      <label>Photo credit (optional)</label><input class="o-credit" maxlength="60" value="${attr(o.credit || "")}" />
+    </div>`).join("");
+  $("addOpt").hidden = draft.length >= MAX_CARDS;
+}
+
+function setKind() {
+  const yn = $("pollForm").elements.kind.value === "yesno";
+  $("choiceBox").hidden = yn;
+  $("yesnoBox").hidden = !yn;
+}
+
+$("addOpt").addEventListener("click", () => {
+  syncDraft();
+  if (draft.length < MAX_CARDS) draft.push(blankCard());
+  renderDraft();
+});
+$("optList").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-optdel]");
+  if (!b) return;
+  syncDraft();
+  draft.splice(Number(b.dataset.optdel), 1);
+  renderDraft();
+});
+$("pollForm").elements.kind.addEventListener("change", setKind);
+newDraft();
+setKind();
 
 boot();
