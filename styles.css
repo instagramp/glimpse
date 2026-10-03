@@ -997,3 +997,27 @@ button { touch-action: manipulation; }
 @keyframes sheetUp { from { transform: translateY(100%); } to { transform: none; } }
 @media (min-width: 721px) { .sheet { align-items: center; } .sheet-card { height: 80vh; border-radius: 22px; } }
 .comment-preview { margin-top: 12px; }
+
+/* ---- Polls with 1, 3+ cards, and Yes/No ---- */
+.battle-arena.arena-n1 { grid-template-columns: minmax(0, 360px); justify-content: center; }
+.battle-arena.arena-multi { grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); }
+.battle-arena.arena-yn { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.arena-multi .battle-name { font-size: 1.15rem; white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.arena-yn .battle-media { aspect-ratio: 4 / 3; }
+.yn-media { display: grid; place-items: center; background: linear-gradient(135deg, rgba(46,229,157,0.28), rgba(46,229,157,0.06)); }
+.battle-card[data-side="1"] .yn-media { background: linear-gradient(135deg, rgba(255,95,122,0.3), rgba(255,95,122,0.06)); }
+.yn-icon { font-size: 3rem; margin-bottom: 70px; }
+.yn-hero { grid-column: 1 / -1; justify-self: center; width: min(280px, 100%); position: relative; aspect-ratio: 1 / 1; border-radius: 18px; overflow: hidden; border: 1px solid var(--line); background: var(--panel); }
+.yn-hero img { width: 100%; height: 100%; object-fit: cover; object-position: center 20%; display: block; }
+.yn-credit { position: absolute; left: 10px; bottom: 6px; }
+.vote-button.yes { background: linear-gradient(135deg, #1fbf82, #2ee59d); color: #07150d; box-shadow: 0 16px 24px rgba(46,229,157,0.25); }
+.vote-button.no { background: linear-gradient(135deg, #ff4d6d, #ff7a90); color: #fff; box-shadow: 0 16px 24px rgba(255,95,122,0.25); }
+
+@media (max-width: 720px) {
+  .battle-arena.arena-n1 { grid-template-columns: minmax(0, 300px); }
+  .battle-arena.arena-multi { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .arena-multi .battle-card:last-child:nth-child(odd) { grid-column: 1 / -1; width: calc(50% - 5px); justify-self: center; }
+  .arena-multi .battle-name { font-size: 1rem; }
+  .yn-icon { font-size: 2.2rem; margin-bottom: 52px; }
+  .battle-arena.arena-yn { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
