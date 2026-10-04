@@ -244,7 +244,7 @@ async function loadPolls() {
   POLLS = data.map((r) => ({
     id: r.id, category: r.category, state: r.state, prompt: r.prompt,
     endsAt: r.ends_at, winner: r.winner, closed: r.closed,
-    kind: r.kind || "choice", image: r.image, imageCredit: r.image_credit,
+    kind: r.kind || "choice", tabTitle: r.tab_title, image: r.image, imageCredit: r.image_credit,
     options: (Array.isArray(r.options) ? r.options : []).map((o) => ({ name: o.name, img: o.img || "", credit: o.credit || null })),
   }));
 }
@@ -254,7 +254,7 @@ function renderPicker(current) {
   const list = pollsInView();
   el.hidden = list.length < 2;
   el.innerHTML = list
-    .map((p) => `<button type="button" class="chip ${p.id === current.id ? "active" : ""}" data-poll-id="${escapeText(p.id)}">${escapeText(pollLabel(p))}</button>`)
+    .map((p) => `<button type="button" class="chip ${p.id === current.id ? "active" : ""}" data-poll-id="${escapeText(p.id)}">${escapeText(p.tabTitle || pollLabel(p))}</button>`)
     .join("");
 }
 
@@ -818,7 +818,7 @@ function tickTimer() {
     return;
   }
   if (!poll.endsAt) {
-    el.textContent = "Open poll. Winner announced later.";
+    el.textContent = "";
     return;
   }
 
