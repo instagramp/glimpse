@@ -106,7 +106,7 @@ function renderPolls() {
         const c = scores[p.id] || {};
         const opts = p.options || [];
         return `<div class="item" data-id="${esc(p.id)}">
-          <div><strong>${esc(adminLabel(p))}</strong>
+          <div><strong>${esc(adminLabel(p))}</strong>${p.tab_title ? ` <span class="muted">· button: ${esc(p.tab_title)}</span>` : ""}
             <div class="muted">${esc(p.category)}${p.state ? " · " + esc(p.state) : ""} · ${esc(status(p))} · votes ${opts.map((o, i) => Number(c[i] || 0)).join(" - ")}</div>
             <div class="muted">${esc(p.prompt)}</div></div>
           <div class="btns">
@@ -157,6 +157,7 @@ function startEdit(p) {
   const f = $("pollForm").elements;
   f.category.value = p.category; f.state.value = p.state || ""; f.prompt.value = p.prompt; f.ends_at.value = localInput(p.ends_at);
   f.kind.value = p.kind || "choice";
+  f.tab_title.value = p.tab_title || "";
   f.kind.disabled = true;
   f.yn_file.value = ""; f.yn_credit.value = p.image_credit || "";
   const locked = votesOf(p.id) > 0;
@@ -217,6 +218,7 @@ $("pollForm").addEventListener("submit", async (e) => {
       category: f.category.value,
       state: hasStates(f.category.value) && f.state.value ? f.state.value : null,
       prompt: f.prompt.value.trim(),
+      tab_title: f.tab_title.value.trim() || null,
       kind,
       ends_at: f.ends_at.value ? new Date(f.ends_at.value).toISOString() : null,
     };
